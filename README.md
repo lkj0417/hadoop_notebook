@@ -22,8 +22,7 @@ HDFS：（Hadoop filesystem）
 
 `start-dfs.sh`： 启动分布式文件存储服务。
 
-![Uploading image-20250114221046352.png…]()
-
+![image-20250114221046352](./202501_Hadoop.assets/image-20250114221046352.png)
 
 - Namenode：负责管理文件系统的命名空间（文件和目录），维护文件系统的元数据，比如文件数和文件的权限等。也是整个hdfs集群的管理者。
 - Datanode：负责存储实际的数据块，以及执行数据块的读/写操作，以满足客户端和Namenode的请求。是hdfs中真正保存数据的角色。
