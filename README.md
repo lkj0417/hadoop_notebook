@@ -62,56 +62,13 @@ hadoop fs -get /input/test.txt ./test.txt
 
 # 查看文件、复制、移动和删除
 hadoop fs -cat /input/test.txt
+hadoop fs -mkdir -p /backup
 hadoop fs -cp /input/test.txt /backup/
 hadoop fs -mv /input/test.txt /input/renamed.txt
 hadoop fs -rm /input/renamed.txt
 
-## cat mkdir get put mv rm du cp
-
-hadoop fs 
-Usage: hadoop fs [generic options]
-        [-appendToFile <localsrc> ... <dst>]
-        [-cat [-ignoreCrc] <src> ...]
-        [-checksum <src> ...]
-        [-chgrp [-R] GROUP PATH...]
-        [-chmod [-R] <MODE[,MODE]... | OCTALMODE> PATH...]
-        [-chown [-R] [OWNER][:[GROUP]] PATH...]
-        [-copyFromLocal [-f] [-p] [-l] <localsrc> ... <dst>]
-        [-copyToLocal [-p] [-ignoreCrc] [-crc] <src> ... <localdst>]
-        [-count [-q] [-h] <path> ...]
-        [-cp [-f] [-p | -p[topax]] <src> ... <dst>]
-        [-createSnapshot <snapshotDir> [<snapshotName>]]
-        [-deleteSnapshot <snapshotDir> <snapshotName>]
-        [-df [-h] [<path> ...]]
-        [-du [-s] [-h] <path> ...]
-        [-expunge]
-        [-find <path> ... <expression> ...]
-        [-get [-p] [-ignoreCrc] [-crc] <src> ... <localdst>]
-        [-getfacl [-R] <path>]
-        [-getfattr [-R] {-n name | -d} [-e en] <path>]
-        [-getmerge [-nl] <src> <localdst>]
-        [-help [cmd ...]]
-        [-ls [-d] [-h] [-R] [<path> ...]]
-        [-mkdir [-p] <path> ...]
-        [-moveFromLocal <localsrc> ... <dst>]
-        [-moveToLocal <src> <localdst>]
-        [-mv <src> ... <dst>]
-        [-put [-f] [-p] [-l] <localsrc> ... <dst>]
-        [-renameSnapshot <snapshotDir> <oldName> <newName>]
-        [-rm [-f] [-r|-R] [-skipTrash] <src> ...]
-        [-rmdir [--ignore-fail-on-non-empty] <dir> ...]
-        [-setfacl [-R] [{-b|-k} {-m|-x <acl_spec>} <path>]|[--set <acl_spec> <path>]]
-        [-setfattr {-n name [-v value] | -x name} <path>]
-        [-setrep [-R] [-w] <rep> <path> ...]
-        [-stat [format] <path> ...]
-        [-tail [-f] <file>]
-        [-test -[defsz] <path>]
-        [-text [-ignoreCrc] <src> ...]
-        [-touchz <path> ...]
-        [-truncate [-w] <length> <path> ...]
-        [-usage [cmd ...]]
-
-
+# 查看命令帮助
+hadoop fs -help
 ```
 
 > `hadoop fs -rm -r` 会递归删除 HDFS 目录及其内容。执行删除命令前请确认目标路径；回收站行为由集群配置决定。
@@ -131,7 +88,7 @@ Usage: hadoop fs [generic options]
 3. 数据块可按策略复制，在节点或磁盘故障时提供容错能力。
 4. 增加节点可扩展集群容量和吞吐能力。
 
-#### 2.1.1 hdfs的写流程
+#### 2.1.1 HDFS 写入流程
 
 ![image-20250116220409328](./202501_Hadoop.assets/image-20250116220409328.png)
 
@@ -139,7 +96,7 @@ Usage: hadoop fs [generic options]
 
 NameNode 负责协调元数据操作和分配目标 DataNode；文件内容由客户端直接通过 DataNode 数据传输协议写入，NameNode 不转发文件数据。多副本写入时，客户端按 NameNode 返回的节点列表建立写入流水线。
 
-#### 2.1.2 hdfs的读流程
+#### 2.1.2 HDFS 读取流程
 
 ![image-20250116221558045](./202501_Hadoop.assets/image-20250116221558045.png)
 
@@ -163,7 +120,7 @@ MapReduce 的用户逻辑通常由 Map 和 Reduce 两类函数组成。Reduce �
 
 MapReduce 的工作流程主要分为 Map、Shuffle 和 Reduce 三个阶段。
 
-MapReduce的核心思想是分（分布式计算）而治（合并结果）之。
+MapReduce 的核心思想是“分而治之”：并行处理数据分片，再汇总结果。
 
 - **Map 阶段**：输入数据被切分为 input split，每个 Map 任务将记录转换为中间键值对。input split 是逻辑输入切分，不一定与 HDFS 数据块一一对应。
 - **Shuffle 阶段**：框架按分区规则将中间数据发送到对应的 Reduce 任务，并在 Reduce 端按键分组、排序。相同键的数据会进入同一个 Reduce 分区。
@@ -181,7 +138,7 @@ MapReduce的核心思想是分（分布式计算）而治（合并结果）之�
 
 参考网盘“代码”目录下的项目。
 
-1. 创建maven项目，添加hadoop-client依赖包
+1. 创建 Maven 项目并添加 `hadoop-client` 依赖。客户端依赖版本应与集群版本兼容，避免客户端和集群版本差异导致协议或配置问题。
 
    ```xml
        <dependency>
@@ -252,7 +209,7 @@ YARN 统一管理集群资源并分配给应用。ResourceManager 负责全局�
 
 
 
-- yarn的启动命令
+#### 启动 YARN
 
   `start-yarn.sh`
 
@@ -265,7 +222,7 @@ YARN 统一管理集群资源并分配给应用。ResourceManager 负责全局�
       </property>
   ```
 
-- yarn的基本命令
+#### YARN 常用命令
 
   ```bash
   yarn jar <jar_path> <main_class> <input_path> <output_path>
@@ -274,32 +231,6 @@ YARN 统一管理集群资源并分配给应用。ResourceManager 负责全局�
   yarn logs -applicationId <application_id> > /tmp/application.log
   
   
-  yarn application 
-  25/01/18 15:25:45 INFO client.RMProxy: Connecting to ResourceManager at hadoop/192.168.56.101:8032
-  Invalid Command Usage : 
-  usage: application
-   -appStates <States>             Works with -list to filter applications
-                                   based on input comma-separated list of
-                                   application states. The valid application
-                                   state can be one of the following:
-                                   ALL,NEW,NEW_SAVING,SUBMITTED,ACCEPTED,RUN
-                                   NING,FINISHED,FAILED,KILLED
-   -appTypes <Types>               Works with -list to filter applications
-                                   based on input comma-separated list of
-                                   application types.
-   -help                           Displays help for all commands.
-   -kill <Application ID>          Kills the application.
-   -list                           List applications. Supports optional use
-                                   of -appTypes to filter applications based
-                                   on application type, and -appStates to
-                                   filter applications based on application
-                                   state.
-   -movetoqueue <Application ID>   Moves the application to a different
-                                   queue.
-   -queue <Queue Name>             Works with the movetoqueue command to
-                                   specify which queue to move an
-                                   application to.
-   -status <Application ID>        Prints the status of the application.
   ```
 
 日志命令能否取回容器日志取决于集群的日志聚合配置和日志保留情况。排查失败任务时，可结合应用状态、RM/NM 日志及 History Server 查看。
@@ -415,9 +346,7 @@ p:解析模式，可选 XML JSON DELIMITED
 
 ```
 
-edits文件记录了操作的过程
-
-可以用于审计
+`edits` 是 NameNode 的事务日志，按事务 ID 记录命名空间变更操作；它可用于恢复检查点之后的状态，但不是面向安全审计的完整访问日志。
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -524,15 +453,15 @@ edits文件记录了操作的过程
 
 ![image-20250119102525188](./202501_Hadoop.assets/image-20250119102525188.png)
 
-Secondary Namenode：
+#### Secondary NameNode 与检查点
 
-在非HA模式中，HDFS依赖Secondary Namenode 辅助 Namenode 进行以下工作：
+在非 HA 模式中，Secondary NameNode 会定期执行 checkpoint：
 
-1. 定时触发检查点（checkpoint）
-   1. 合并 fsimage 和 edits 文件，生成新的fsimage文件
-   2. 清理已经应用到fsimage后的edits，避免edits无限增长。
-2. 提供fsimage的备份
-   1. 如果Namenode 异常退出，那么可以利用Secondary Namenode中保存的最新检查点，用于恢复元数据。
+1. 获取当前 `fsimage` 和尚未应用的 `edits`。
+2. 合并并生成新的检查点，减少 NameNode 重启时需要重放的日志量。
+3. 将新检查点交回 NameNode，并允许清理已合并的旧日志。
+
+> Secondary NameNode 不是 NameNode 的热备节点，也不会在 NameNode 故障时自动接管。检查点可用于辅助恢复元数据，但不能替代 HA、备份或灾难恢复方案。
 
 ![image-20250119102836394](./202501_Hadoop.assets/image-20250119102836394.png)
 
@@ -548,51 +477,52 @@ https://hadoop.apache.org/docs/r2.10.2/hadoop-project-dist/hadoop-hdfs/hdfs-defa
 
 
 
-### 3.2 集群高可用
+### 3.2 HDFS 高可用
 
 ![image-20250119103304640](./202501_Hadoop.assets/image-20250119103304640.png)
 
-为了解决单点故障问题，我们可以加多一个Namenode，作为Standby（待命）
+为减少 NameNode 单点故障，可部署一对 NameNode：Active 处理客户端请求，Standby 持续同步元数据并在故障转移时接管。
 
 ![image-20250119104241641](./202501_Hadoop.assets/image-20250119104241641.png)
 
-Standby Namenode：
+#### HA 组件与故障转移
 
-HA模式的核心目标是消除 Namenode 的单点故障问题，通过两个Namenode（Active和Standby）实现冗余。这种情况下，SecondaryNamenode失去了他的作用。
+1. **Active NameNode**：处理文件系统元数据请求，并将命名空间变更写入 JournalNode 集群。
+2. **Standby NameNode**：读取并应用共享的 edits，保持命名空间状态同步；故障转移后可成为 Active。
+3. **JournalNode**：组成共享 edits 的多数派服务。通常部署奇数个节点以维持可用的多数派。
+4. **ZKFC（ZooKeeper Failover Controller）**：监控 NameNode 健康状态，并在启用自动故障转移时协调切换。还需配置 fencing，避免原 Active 在隔离失败时继续处理写请求。
 
-在HA模式中，HDFS依赖Standy Namenode 辅助 Namenode 进行以下工作：
-
-1. 两个Namenode：
-   1. Active Namenode：处理客户端的请求，发送元信息到JournalNode
-   2. Standby Namenode：作为热备节点，与Active Namenode 保持同步状态，一旦Active Namenode出现故障，就会接管Active Namenode的工作，成为Active Namenode
-2. JournalNode：实现两个Namenode的元信息共享（元数据的更改操作日志）
-3. SecondaryNamenode 进程需要停掉，不再参与元信息checkpoint。
+HA 客户端通常通过逻辑 nameservice URI 和 failover proxy provider 访问 HDFS，而不是固定连接某台 NameNode。HA 配置中由 Standby 承担检查点相关工作，不需要另外启动 Secondary NameNode。
 
 ## 附录
 
-### 集群和分布式
+### 集群与分布式
 
-集群：由多个独立的计算机（物理、虚拟）节点组成的系统，这些计算机通过**网络**连接在一起，对外表现为一个整体。集群通常用于提高系统的性能、可用性和可靠性。
+**集群**：由多个独立的计算机（物理或虚拟节点）通过网络连接组成，对外提供协同服务。集群常用于扩展容量、吞吐量或可用性。
 
-分布式：是一种将计算任务或者数据分散到多个计算节点上共同完成的技术架构。每个节点独立完成一部分任务，节点之间是通过**网络**协作，实现整体目标。
+**分布式系统**：将数据或计算任务分布到多个节点，并通过网络协作完成整体目标。集群描述节点组织方式，分布式描述系统的处理方式；二者相关但并非同义词。
+
+常见的分布式能力包括：
 
 - 分布式存储
 - 分布式计算
-- 分布式资源调度管理
+- 分布式资源调度与管理
 
 ### 网络
 
-计算机本身可以独立完成很多功能，但是一台计算机上面的资源（信息）总是有限的。而计算机网络的出现让计算机本身不再是独立的个体，通过让各个计算机连接在一起，形成计算机网络。**可以让不同的计算机之间协同处理各项任务**。
+网络使不同主机能够交换数据并协同完成任务。理解以下概念有助于排查 Hadoop 节点之间的连接问题：
 
-- IP： 因为网络中有非常非常多的计算机，我们怎么找到我想要访问的计算机呢？通过IP地址，IP就像是一个标识，类似于门牌号。
-- 域名（主机名）：因为IP是一些列的数字组成，难以记忆，所以产生主机名（域名），方便人类记忆。（比如：www.baidu.com）
-- 端口：端口是一个号码，用来标识当前服务器上不同的进程对外提供的不同的服务（3306——mysql，80/443——web）
-- `netstat -naltp|grep {端口号}`：通常用来判断某个端口是否正在对外服务。
-- 如果访问不了一个服务，通常有两个原因： 1. 网络不通 2. 服务没启动好。
+- **IP 地址**：标识网络接口，用于定位主机或接口。
+- **主机名 / 域名**：便于记忆的名称，通常需要通过 DNS 或本地 hosts 配置解析为 IP。
+- **端口**：标识主机上由某个进程提供的网络服务；能连接到主机并不代表目标端口上的服务可用。
+- Linux 上可用 `ss -lntp` 查看 TCP 监听端口；旧环境也可能使用 `netstat -naltp`。可用 `nc -vz <host> <port>` 测试 TCP 连通性。
+- 连接失败时，依次检查主机名解析、网络路由/防火墙、目标端口是否监听，以及服务端日志。
 
-### hadoop用到的端口
+### Hadoop 常用端口
 
-| 组件     | 节点                | 默认端口  | 配置                                          | 用途说明                                                    |
+以下为 Hadoop 2.x 环境中常见的默认端口，并非固定值。版本、发行版和配置都可能改变端口；集群部署时应以对应版本的配置文件及实际监听状态为准。
+
+| 组件     | 节点                | 常见端口  | 配置                                          | 用途说明                                                    |
 | -------- | ------------------- | --------- | --------------------------------------------- | ----------------------------------------------------------- |
 | HDFS     | DataNode            | 50010     | dfs.datanode.address                          | datanode服务端口，用于数据传输                              |
 | HDFS     | DataNode            | 50075     | dfs.datanode.http.address                     | http服务的端口                                              |
@@ -620,20 +550,21 @@ HA模式的核心目标是消除 Namenode 的单点故障问题，通过两个Na
 
 ### 集群角色规划
 
-标准4节点部署集群：
+示例：4 节点部署。NameNode 的 Standby 仅用于 HA 部署；非 HA 部署可将该位置改为 Secondary NameNode。ResourceManager 同理，Standby RM 需要配置 YARN HA。
 
-| 角色                              | 节点1（16G 8vCores） | 节点2（256GB 128vCores） | 节点3（256GB 128vCores） | 节点4（256GB 128vCores） |
-| --------------------------------- | -------------------- | ------------------------ | ------------------------ | ------------------------ |
-| NameNode                          | ✅                    |                          |                          |                          |
-| DataNode                          |                      | ✅                        | ✅                        | ✅                        |
-| SecondaryNamenode/StandbyNamenode |                      |                          |                          | ✅                        |
-| ResourceManager                   | ✅                    |                          |                          |                          |
-| ResourceManager                   |                      |                          | ✅                        |                          |
-| NodeManager                       |                      | ✅                        | ✅                        | ✅                        |
+| 角色                    | 节点1（16 GB / 8 vCores） | 节点2（256 GB / 128 vCores） | 节点3（256 GB / 128 vCores） | 节点4（256 GB / 128 vCores） |
+| ----------------------- | ------------------------ | ---------------------------- | ---------------------------- | ---------------------------- |
+| NameNode（Active）      | ✅                        |                              |                              |                              |
+| NameNode（Standby，HA） |                          |                              |                              | ✅（二选一）                  |
+| Secondary NameNode（非 HA） |                       |                              |                              | ✅（二选一）                  |
+| DataNode                |                          | ✅                            | ✅                            | ✅                            |
+| ResourceManager（Active） | ✅                      |                              |                              |                              |
+| ResourceManager（Standby，HA） |                    |                              | ✅                            |                              |
+| NodeManager             |                          | ✅                            | ✅                            | ✅                            |
 
 
 
-简化的集群（单节点）：
+简化的单节点学习环境（不具备生产级容错能力）：
 
 | 角色              | 节点1（192.168.56.101） |
 | ----------------- | ----------------------- |
@@ -643,30 +574,28 @@ HA模式的核心目标是消除 Namenode 的单点故障问题，通过两个Na
 | ResourceManager   | ✅                       |
 | NodeManager       | ✅                       |
 
-### 启动和停止命令
+### 启动与停止命令
 
 ```bash
 ## 查看环境变量配置
 cat ~/.bash_profile
 
-
-## 启动hdfs
+## 按集群配置启动 HDFS 和 YARN
 start-dfs.sh
-## 启动yarn
 start-yarn.sh
 
-## 同时启动hadoop的所有角色
+## 同时启动配置中的 Hadoop 服务
 start-all.sh
-
 
 stop-dfs.sh
 stop-yarn.sh
 stop-all.sh
 ```
 
-如果启动后，角色无法正常服务，则需要查看日志。（日志是排查问题的最重要的手段）。
+启动脚本依赖正确的配置、主机名解析和 SSH 免密访问。若服务未正常启动，优先检查对应进程日志，并确认端口没有被占用。
 
 ```bash
-# 查看日志存放路径：一般是cd到安装目录的配置文件目录
-grep  "logs" *
+# 检查环境变量，并查看常见 Hadoop 日志目录（具体位置因部署而异）
+echo "${HADOOP_LOG_DIR:-未设置}"
+find "$HADOOP_HOME/logs" -maxdepth 1 -type f -print
 ```
