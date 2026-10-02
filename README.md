@@ -147,6 +147,12 @@ NameNode 负责协调元数据操作和分配目标 DataNode；文件内容由�
 
 客户端先向 NameNode 查询文件块位置，再从可用副本中选择合适的 DataNode 直接读取数据。NameNode 不转发文件内容；副本选择会考虑网络拓扑和可用性，不应简单理解为始终选择物理距离最近的节点。
 
+读写流程可概括为：
+
+1. 客户端向 NameNode 请求文件元数据或新建文件所需的块位置。
+2. NameNode 返回块位置或可写 DataNode 列表；文件数据由客户端与 DataNode 直接传输。
+3. DataNode 向 NameNode 汇报块状态，NameNode 根据副本策略监控并补齐副本。
+
 
 
 ### 2.2 MapReduce：分布式计算
@@ -224,25 +230,25 @@ MapReduce的核心思想是分（分布式计算）而治（合并结果）之�
 
 5. 另外，程序执行完，通常会有输出，需要检查输出是否正确。
 
-### 2.3 分布式资源调度
+### 2.3 YARN：资源调度
 
 ![image-20250118144708645](./202501_Hadoop.assets/image-20250118144708645.png)
 
-分布式资源调度器本身也是主从架构的，ResourceManager是整个集群的管理者，NodeManager是每个计算节点上的管理者
+YARN 统一管理集群资源并分配给应用。ResourceManager 负责全局资源管理和调度，NodeManager 负责管理单个工作节点；应用的 ApplicationMaster 与任务容器协同完成作业运行。
 
-ResourceManager（端口8088）
+#### 核心角色
 
-1. 资源管理（掌握整个计算集群的资源情况） 
-2. 作业的调度（接收提交作业请求，合理的调度作业）
+- **ResourceManager（RM）**：全局资源管理与应用调度。Web UI 常见端口为 8088（Hadoop 2.x 默认值，可能被配置覆盖）。
+- **NodeManager（NM）**：管理节点本地资源和容器，向 RM 汇报状态，并负责启动、监控容器。Web UI 常见端口为 8042。
+- **ApplicationMaster（AM）**：每个应用通常有自己的 AM，负责与 RM 协商资源，并协调应用任务；MapReduce 作业使用 MRAppMaster。
+- **Container**：YARN 分配的资源单元，描述运行任务所需的资源（如内存和 vCores）；NM 在其中启动应用进程。Container 不只是 JVM 环境的封装。
 
-NodeManager（端口8042）
+#### 作业提交与运行概览
 
-1. 管理单个节点上的资源
-2. 真正的运行用户代码
-
-Container
-
-Container也叫做容器，是yarn上面的一个资源的抽象概念，它是资源和运行环境的封装（jvm环境）。是为了量化计算资源而产生的概念。
+1. 客户端向 RM 提交应用，RM 接收请求并启动 AM。
+2. AM 向 RM 请求任务所需的 Container。
+3. RM 的调度器根据队列和可用资源分配 Container，NM 随后启动任务进程。
+4. AM 监控任务进度并处理任务级别的重试；应用完成后向 RM 汇报最终状态。
 
 
 
@@ -250,11 +256,7 @@ Container也叫做容器，是yarn上面的一个资源的抽象概念，它是�
 
   `start-yarn.sh`
 
-  当`yarn.nodemanager.resource.detect-hardware-capabilities`（默认false）配置为true时，并且	`yarn.nodemanager.resource.memory-mb`	配置为-1 时，NodeManager（默认-1）默认内存会设置为8192MB（可能和实际内存不符）
-
-  通常可以配置yarn-site中对NodeManager内存的大小
-
-  测试环境可以稍微配大一点（超配），生产环境建议保守一点，一般为服务器总内存的80%~90%左右即可。
+  `yarn.nodemanager.resource.memory-mb` 用于配置 NodeManager 可供 YARN 调度的内存。应结合操作系统、守护进程和容器开销规划资源，并同时设置合理的 vCore 数量；不要将全部物理内存分配给 YARN。硬件自动检测和未显式配置时的行为与 Hadoop 版本及配置有关，应以实际环境为准。
 
   ```xml
       <property>
@@ -266,11 +268,10 @@ Container也叫做容器，是yarn上面的一个资源的抽象概念，它是�
 - yarn的基本命令
 
   ```bash
-  yarn jar # 提交MR任务，等同于hadoop jar
-  yarn application # 查看任务相关信息
-  yarn logs # 查看作业的日志，经常用于任务失败后的排查
-  yarn logs -applicationId application_1737184696587_0002 > /tmp/application_1737184696587_0002.log # 会输出所有的map和reduce任务的日志，以及APP master的日志。通常会重定向到一个文件中，再通过vim/less之类的命令查看日志。
-  yarn container
+  yarn jar <jar_path> <main_class> <input_path> <output_path>
+  yarn application -list
+  yarn application -status <application_id>
+  yarn logs -applicationId <application_id> > /tmp/application.log
   
   
   yarn application 
@@ -301,73 +302,66 @@ Container也叫做容器，是yarn上面的一个资源的抽象概念，它是�
    -status <Application ID>        Prints the status of the application.
   ```
 
+日志命令能否取回容器日志取决于集群的日志聚合配置和日志保留情况。排查失败任务时，可结合应用状态、RM/NM 日志及 History Server 查看。
+
 ![image-20250118152756782](./202501_Hadoop.assets/image-20250118152756782.png)
 
-ResourceManager的核心组成：
+#### ResourceManager 的核心组成
 
-1. ResourceScheduler（资源调度器），主要负责协调集群中各个应用的资源分配，保证整个集群的运行效率。ResourceScheduler只是一个纯调度器，只负责给用户提交的应用程序分配Container（资源），并不会关注应用程序的运行状态信息/监控信息。换句话说，如果一个任务运行失败了，ResourceScheduler不会负责重启应用程序。在yarn中，有多种任务的调度算法（调度器）
+1. **ResourceScheduler（资源调度器）**：根据调度策略为应用分配 Container。调度器负责资源分配，不负责监控应用进程或重启失败的 AM；这些职责由 RM 的其他部分和应用管理机制承担。常见调度器包括 FIFO、Capacity 和 Fair，具体可用项取决于发行版与配置。
 
-   1. FIFO（先进先出）：多个任务同时请求时，如果资源不够启动所有任务，那么谁先提交，就先运行。（最简单直观，但是生产几乎不用）缺少对资源的合理分配，没有考虑每个任务的优先级、等待时间、资源需求量等。
+   1. **FIFO（先进先出）**：按提交顺序调度，配置和理解简单；大集群多租户场景中，通常需要更细致的队列与资源隔离策略。
 
-   2. 容量调度器（capacity scheduler）：将资源划分成多个不同的队列，不同的任务可以划分到不同的队列上运行，互相不干扰。当某个队列任务排队较多，而其他队列较为空闲时，可以将空闲队列的资源暂时借给繁忙的队列使用（借用多少取决于配置）。 每个队列内部还是采用FIFO的方式进行调度。
+   2. **Capacity Scheduler（容量调度器）**：将资源划分到多个队列，可为队列配置容量和最大容量。空闲资源是否可被其他队列使用、以及队列内部如何排序，取决于调度器配置。
 
-   3. 公平调度器（Fair scheduler）：公平调度是一种向应用程序分配资源的方法，以便所有**应用程序随着时间的推移平均获得平等的资源**份额。相对公平、按照权重分配，**无法控制绝对的资源百分比**。
+   3. **Fair Scheduler（公平调度器）**：根据队列、权重及公平策略在应用间分配资源。具体资源保障和上限由队列配置决定，不能仅凭“公平”推断每个应用会获得相同份额。
 
       <img src="./202501_Hadoop.assets/image-20250119113049703.png" alt="image-20250119113049703"  />
 
-2. ApplicationManager（应用管理器），主要负责接收用户提交的请求，为应用程序**分配第一个Container**来运行任务的application master，另外就是负责监控application master，当application master遇到异常情况时，ApplicationManager会自动帮我们重试application master。
+2. **ApplicationsManager（应用管理器）**：接收应用提交请求，并启动应用的第一个 Container（运行 AM）。AM 的重试行为受策略及最大尝试次数等配置控制，并非任何故障都会无条件自动重试。
 
-   1. application master是每个MapReduce程序都会有的，运行在Container，会负责将整个MapReduce任务所需要的资源向ResourceScheduler提出申请。可以看作是开发者对资源控制的入口。
+   1. 每个 MapReduce 作业通常运行自己的 AM（MRAppMaster），并由它向 RM 申请作业所需的任务 Container、协调任务执行及汇总状态。
 
-NodeManager
+#### NodeManager
 
-1. 定时心跳上报节点资源使用情况
-2. 接收到ResourceManager的启动Container请求后，负责启动Container，执行运算任务。
+1. 定期向 ResourceManager 发送心跳和节点状态。
+2. 接收启动 Container 的指令，启动并监控容器中的任务进程。
 
 ![image-20250118160149915](./202501_Hadoop.assets/image-20250118160149915.png)
 
 ![image-20250118160211858](./202501_Hadoop.assets/image-20250118160211858.png)
 
-为了方便查看任务的运行历史情况，可以启动一个 historyServer的服务
+启动 JobHistory Server 后，可查看已完成 MapReduce 作业的历史信息：
 
 `mr-jobhistory-daemon.sh start historyserver`
 
 ![image-20250118161740021](./202501_Hadoop.assets/image-20250118161740021.png)
 
-根据容量调度器的配置，default和queueB分别占用40%（最大60%）和60%（最大80%）的资源
+下面的实验配置中，`default` 和 `queueB` 的容量分别为 40% 和 60%，最大容量分别为 60% 和 80%。容量与最大容量是队列策略参数，实际可用资源还取决于集群资源及其他队列的使用情况。
 
-修改队列资源不需要重启ResourceManager，只需要执行`yarn rmadmin -refreshQueues` 即可。
+修改容量调度器队列配置后，可在支持该操作的版本中运行 `yarn rmadmin -refreshQueues` 使配置生效；具体支持范围请核对对应版本文档。
 
 ![image-20250118164551125](./202501_Hadoop.assets/image-20250118164551125.png)
 
 ![image-20250118164935550](./202501_Hadoop.assets/image-20250118164935550.png)
 
-无奈，只能kill掉，然后加大资源，或者换其他队列。
-
-
-
 ```bash
-## 指定队列执行任务
-hadoop jar MapReduceDemo-1.0-SNAPSHOT.jar com.demo.hadoop.mapreduce.wordcount.WordCountJob hdfs://192.168.56.101:9000/input/ -Dmapreduce.job.queuename=queueB  
-# 也可以在代码中配置队列，但是不太推荐。
-        job.getConfiguration().set("mapreduce.job.queuename","queueB");
-
-
-## 第二种方式，把队列资源调大
-  <property>
-    <name>yarn.scheduler.capacity.root.default.maximum-capacity</name>
-    <value>100</value>
-    <description>
-      The maximum capacity of the default queue. 
-    </description>
-  </property>
+# 将 MapReduce 作业提交到指定队列（参数顺序按 Hadoop CLI 约定）
+hadoop jar <jar_path> -Dmapreduce.job.queuename=queueB <main_class> <input_path> <output_path>
 ```
 
+也可以在代码中设置作业队列：
+
+```java
+job.getConfiguration().set("mapreduce.job.queuename", "queueB");
+```
+
+如果队列无法获得所需资源，应先检查队列容量、最大容量、用户/应用限制及集群可用资源，再考虑调整队列配置或提交到其他队列。
 
 
-## 三、 进阶
+## 3. 进阶原理
 
-### 3.1 fsimage和edits
+### 3.1 fsimage 与 edits
 
 > 参考：https://zhuanlan.zhihu.com/p/363319862
 
@@ -385,7 +379,7 @@ o: output
 p:解析模式，可选 XML JSON DELIMITED
 ```
 
-namenode存储的元信息（fsimage文件）：有什么文件、分了多少个块、权限规则、多少个副本、更新时间...
+`fsimage` 是文件系统命名空间在某个检查点的持久化快照，保存目录、文件、权限、块标识及副本数等元数据。它不记录块当前实际位于哪些 DataNode；NameNode 从 DataNode 心跳和块汇报中获得块位置。
 
 ```xml
 <!-- 这是一个文件的元信息 -->
@@ -399,7 +393,7 @@ namenode存储的元信息（fsimage文件）：有什么文件、分了多少�
   <perferredBlockSize>134217728</perferredBlockSize>
   <permission>hadoop:supergroup:rw-r--r--</permission>
   <blocks>
-    <!-- 数据块放在哪个节点上？ -->
+    <!-- 文件关联的数据块元数据；实际 DataNode 位置不保存在这里 -->
     <block>
       <id>1073741825</id>
       <genstamp>1001</genstamp>
