@@ -1,41 +1,53 @@
 # Apache Hadoop
 
-## 一、简介
+> 本文是 Hadoop 学习与实验笔记，示例主要来自 Hadoop 2.x 环境。不同发行版和版本的默认配置、命令及端口可能不同；部署时请以实际配置和对应版本的官方文档为准。
 
-什么是hadoop？
+## 目录
 
-- 狭义上讲，hadoop指的是Apache Hadoop这个软件。是大数据的基石。
-- 由Apache基金会开发的分布式系统基础架构。它允许用户在不了解分布式底层细节的情况下，开发分布式计算程序，从而解决分布式计算问题。另外，通过Hadoop的分布式存储能力，解决海量数据存储的问题。
-  - 分布式存储
-  - 分布式计算框架
-  - 分布式资源调度
+- [1. Hadoop 简介](#1-hadoop-简介)
+- [2. 核心组件与基本操作](#2-核心组件与基本操作)
+  - [2.1 HDFS：分布式存储](#21-hdfs分布式存储)
+  - [2.2 MapReduce：分布式计算](#22-mapreduce分布式计算)
+  - [2.3 YARN：资源调度](#23-yarn资源调度)
+- [3. 进阶原理](#3-进阶原理)
+  - [3.1 fsimage 与 edits](#31-fsimage-与-edits)
+  - [3.2 HDFS 高可用](#32-hdfs-高可用)
+- [附录](#附录)
 
-- 广义上讲，Hadoop指的是一个大数据的生态圈
-  - hbase、hive、spark、flink、zookeeper、kafka....
-  - elasticsearch、clickhouse、doris
+## 1. Hadoop 简介
 
-## 二、基本原理和操作
+### 什么是 Hadoop？
 
-### 2.1 分布式存储服务
+- **狭义**：Apache Hadoop 是 Apache 软件基金会维护的开源分布式数据处理平台。它提供大规模数据存储、批处理计算和集群资源管理能力。
+  - **HDFS**：分布式文件系统，负责存储数据。
+  - **MapReduce**：分布式批处理计算框架。
+  - **YARN**：集群资源管理与任务调度平台。
+  - **Hadoop Common**：其他模块共享的基础库和工具。
 
-HDFS：（Hadoop filesystem）
+- **广义**：日常交流中的“Hadoop 生态”通常还包括 Hive、HBase、Spark、Flink、ZooKeeper、Kafka 等项目。这些项目与 Hadoop 集成或协同工作，但并不都属于 Apache Hadoop 本身。
 
-`start-dfs.sh`： 启动分布式文件存储服务。
+## 2. 核心组件与基本操作
+
+### 2.1 HDFS：分布式存储
+
+HDFS（Hadoop Distributed File System）将大文件拆分为数据块，分散存储在多个 DataNode 上，并通过副本机制提高容错能力。
+
+启动 HDFS 服务：
+
+```bash
+start-dfs.sh
+```
 
 ![image-20250114221046352](./202501_Hadoop.assets/image-20250114221046352.png)
 
-- Namenode：负责管理文件系统的命名空间（文件和目录），维护文件系统的元数据，比如文件数和文件的权限等。也是整个hdfs集群的管理者。
-- Datanode：负责存储实际的数据块，以及执行数据块的读/写操作，以满足客户端和Namenode的请求。是hdfs中真正保存数据的角色。
+- **NameNode**：管理文件系统命名空间及元数据，例如目录、文件权限、文件到数据块的映射和副本数；它通常不保存文件内容本身。
+- **DataNode**：在本地磁盘保存数据块，并按 NameNode 指令创建、删除或复制数据块，同时向 NameNode 汇报状态。
 
-因为hdfs本身是一个分布式的文件系统，在访问这个文件系统的时候，所有命令都需要添加hadoop fs 前缀来访问。如果不带上hadoop fs前缀，操作的就是linux的文件系统，注意区分。
+访问 HDFS 时使用 `hadoop fs`（或 `hdfs dfs`）命令；不带这些前缀的 `ls`、`mkdir` 等命令操作的是本地 Linux 文件系统。
 
-当我们通过 `hadoop fs -ls /`命令访问根目录时，实际上它访问的是`hadoop fs -ls hdfs://192.168.56.101:9000/`。
+当执行 `hadoop fs -ls /` 时，客户端会将 `/` 解析为 `fs.defaultFS` 指定的文件系统路径。该配置通常位于 `core-site.xml`；示例环境可能配置为 `hdfs://192.168.56.101:9000`，不要将示例地址当作通用默认值。
 
-hdfs://192.168.56.101:9000/
-
-hdfs 是固定的协议，所以可以省略
-
-192.168.56.101:9000 这个是ip和端口，告诉hadoop客户端访问的是哪个hdfs。这部分实际上配置在配置文件(/home/hadoop/app/hadoop/etc/hadoop/core-site.xml)中，当没有指定时，就按照配置文件中的地址进行访问，所以也可以省略。
+指定完整 URI 可以明确目标集群；省略 `hdfs://主机:端口` 时，客户端使用 `fs.defaultFS`。不同 Hadoop 版本和集群部署的 RPC 地址可能不同。
 
 <img src="./202501_Hadoop.assets/image-20250114222935211.png" alt="image-20250114222935211" style="zoom:50%;" />
 
@@ -653,4 +665,3 @@ stop-all.sh
 # 查看日志存放路径：一般是cd到安装目录的配置文件目录
 grep  "logs" *
 ```
-
