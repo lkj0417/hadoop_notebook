@@ -52,10 +52,19 @@ start-dfs.sh
 <img src="./202501_Hadoop.assets/image-20250114222935211.png" alt="image-20250114222935211" style="zoom:50%;" />
 
 ```bash
-# 上传文件
-hadoop fs -put test.txt /
-# 下载文件
-hadoop fs -get /test.txt 
+# 查看和创建 HDFS 目录
+hadoop fs -ls /
+hadoop fs -mkdir -p /input
+
+# 上传、下载文件（本地路径与 HDFS 路径要区分）
+hadoop fs -put ./test.txt /input/
+hadoop fs -get /input/test.txt ./test.txt
+
+# 查看文件、复制、移动和删除
+hadoop fs -cat /input/test.txt
+hadoop fs -cp /input/test.txt /backup/
+hadoop fs -mv /input/test.txt /input/renamed.txt
+hadoop fs -rm /input/renamed.txt
 
 ## cat mkdir get put mv rm du cp
 
@@ -105,54 +114,56 @@ Usage: hadoop fs [generic options]
 
 ```
 
+> `hadoop fs -rm -r` 会递归删除 HDFS 目录及其内容。执行删除命令前请确认目标路径；回收站行为由集群配置决定。
+
 ![image-20250114222552718](./202501_Hadoop.assets/image-20250114222552718.png)
 
-数据块和副本
+#### 数据块与副本
 
-在hdfs当中，文件块/数据块（block）是最基本的存储单位。对于文件而言，文件的大小可以小于一个块，也可以大于一个块。文件的大小称之为size，当一个文件超过默认的块大小时（128MB），那么这个文件就会被切割成几个数据块。数据块在linux服务器的存储路径：`/home/hadoop/data/dn/current/BP-526458200-192.168.56.101-1629506932865/current/finalized/subdir0`
+数据块（block）是 HDFS 存储文件的基本单位。文件可以小于一个块，也可以拆分为多个块；Hadoop 2.x 的常见默认块大小为 128 MiB，但可通过配置调整。块在 DataNode 本地磁盘上的实际文件大小可以小于块的配置上限，最后一个块通常不足一个完整块。
 
-数据块最大大小固定是128MB（可配置），但是在真实的linux存储路径上，数据块会议真实的大小进行保存
+副本数由文件和集群配置决定，常见默认值为 3。副本存放在不同 DataNode 上有助于提高容错性，但副本数本身并不等于完整的备份策略；生产环境仍需规划故障域、快照和备份。
 
-副本：通过冗余多份（默认3份）数据，保障当有部分节点出现异常时，不影响整体的读写功能。这就是所谓的副本机制保证高可用性。
+将文件切分为数据块的主要原因：
 
-为什么要切成相同大小的block?
-
-1. 为了支持大文件的存储：hdfs被设计为用于存储和处理大规模数据（TB级别甚至PB级别）。将文件切成数据块，有利于有效的突破单个机器的存储限制。
-2. 为了能够支持高效的存储和读取效率：多个数据块存储到不同的节点（磁盘）上，可以并行处理，从而为并行计算提供了可能性。
-3. 副本机制：保证数据高可用，增加容错性
-4. 支持动态扩展：当集群需要扩展时，可以平滑的增加存储和计算能力，无需进行大规模数据迁移。
+1. 文件可跨多台机器存储，不受单机磁盘容量限制。
+2. 不同数据块可分布在多个节点上并行读取和处理。
+3. 数据块可按策略复制，在节点或磁盘故障时提供容错能力。
+4. 增加节点可扩展集群容量和吞吐能力。
 
 #### 2.1.1 hdfs的写流程
 
 ![image-20250116220409328](./202501_Hadoop.assets/image-20250116220409328.png)
 
-上传一个文件： `hadoop fs -put wordcount.txt /tmp`
+上传文件示例：`hadoop fs -put wordcount.txt /tmp`
 
-注意：真正在上传数据的时候，是不需要经过Namenode进行传输的，是由客户端直接和datanode发起网络连接进行上传。
+NameNode 负责协调元数据操作和分配目标 DataNode；文件内容由客户端直接通过 DataNode 数据传输协议写入，NameNode 不转发文件数据。多副本写入时，客户端按 NameNode 返回的节点列表建立写入流水线。
 
 #### 2.1.2 hdfs的读流程
 
 ![image-20250116221558045](./202501_Hadoop.assets/image-20250116221558045.png)
 
-读取/下载一个文件：`hadoop fs -get /tmp/wordcount.txt /tmp/`
+读取/下载文件示例：`hadoop fs -get /tmp/wordcount.txt ./`
 
-注意： 读取文件块的时候，同样是直接找到**最近**的datanode（多个副本，找距离最近的）进行读取，不需要经过namenode转发流量。
+客户端先向 NameNode 查询文件块位置，再从可用副本中选择合适的 DataNode 直接读取数据。NameNode 不转发文件内容；副本选择会考虑网络拓扑和可用性，不应简单理解为始终选择物理距离最近的节点。
 
 
 
-### 2.2 分布式计算框架
+### 2.2 MapReduce：分布式计算
 
-MapReduce 是一种分布式计算模型，由Google公司提出，解决**海量数据**的计算问题。
+MapReduce 是一种由 Google 提出的分布式批处理计算模型。Hadoop MapReduce 通过框架管理输入切分、任务调度、失败重试和结果输出；开发者主要实现数据处理逻辑。
 
-由两部分组成：Map和Reduce。我们有了hadoop中的MapReduce框架后，开发一个分布式计算的程序就变得非常简单。我们开发一个基于MapReduce计算框架的分布式计算式计算程序时，只需要实现 map() 接口和reduce()接口，实现在不同的节点上处理部分数据的功能即可。
+MapReduce 的用户逻辑通常由 Map 和 Reduce 两类函数组成。Reduce 阶段可以省略，用于只需映射处理的任务。
 
-MapReduce的工作流程主要分为三个阶段：Map、Shuffle和Reduce。
+MapReduce 的工作流程主要分为 Map、Shuffle 和 Reduce 三个阶段。
 
 MapReduce的核心思想是分（分布式计算）而治（合并结果）之。
 
-- map阶段，数据的数据会被分片并格式化为键值对，随后每个map任务回并行处理这些数据。
-- shuffle阶段，shuffle负责将map输出的数据进行排序和分配，确保相同的键被发送到同一个Reduce任务中
-- Reduce阶段，将shuffle发送过来的数据进行汇总并输出，完成整个数据处理结果输出。
+- **Map 阶段**：输入数据被切分为 input split，每个 Map 任务将记录转换为中间键值对。input split 是逻辑输入切分，不一定与 HDFS 数据块一一对应。
+- **Shuffle 阶段**：框架按分区规则将中间数据发送到对应的 Reduce 任务，并在 Reduce 端按键分组、排序。相同键的数据会进入同一个 Reduce 分区。
+- **Reduce 阶段**：对每个键及其对应的值集合进行汇总或转换，结果写入配置的输出位置。
+
+可选的 **Combiner** 可以在 Map 端做局部聚合以减少网络传输，但只有在运算满足相应结合性、可交换性等要求时才适用；它不保证一定执行。
 
 #### 2.2.1 基本开发流程
 
@@ -162,7 +173,7 @@ MapReduce的核心思想是分（分布式计算）而治（合并结果）之�
 
 
 
-参考 网盘中的  代码目录下的项目
+参考网盘“代码”目录下的项目。
 
 1. 创建maven项目，添加hadoop-client依赖包
 
